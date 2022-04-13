@@ -1,80 +1,32 @@
-<textarea readonly="1" id="term" cols="340" name="t1" wrap="off"></textarea>
-<button id="startstop" onclick="connect();">Connect</button>
-<script>
-    let packets = [];
-    let lastError = '';
-    let unknownData = '';
-    const term = document.getElementById("term");
-    const button = document.getElementById('startstop');
-    let socket;
+<!DOCTYPE html>
+<html lang="en">
 
-    function formatPacket(byteArray) {
-        var s = '';
-        byteArray.forEach((byte) => {
-            s += ('0' + byte.toString(16)).slice(-2);
-            s += ' ';
-        });
-        return s;
-    }
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+    <title>Monitor - Owie</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
 
-    function updateTerminal() {
-        let text = '';
-        for (let i = 0; i < packets.length; i++) {
-            text += packets[i] || '';
-            text += '\n';
-        }
-        term.value = (text + unknownData + lastError);
-    }
+<body>
+    <div class="wrapper">
+        <div class="header">
+            <button data-route="/">Back</button>
+            <div class="title">
+                <h2>Monitor</h2>
+            </div>
+        </div>
+        <div id="content">
+            <textarea readonly="1" id="term" cols="340" name="t1" wrap="off"></textarea>
+            <button id="startstop" onclick="monitor.connect();">Connect</button>
+        </div>
+        <div class="footer">
+            <hr>
+            <p>Owie v%OWIE_version%</p>
+        </div>
+    </div>
+    <script src="scripts.js"></script>
+    <script src="monitor.js"></script>
+</body>
 
-    function stop() {
-        socket.close();
-        socket = undefined;
-    }
-
-    function connect() {
-        socket = new WebSocket(`ws://${window.location.hostname}/rawdata`);
-        socket.binaryType = "arraybuffer";
-        socket.onopen = function () {
-            lastError = 'connected';
-            updateTerminal();
-            button.innerText = 'Stop';
-            button.setAttribute('onclick', 'stop();');
-        }
-        socket.onclose = function () {
-            lastError = 'disconnected';
-            updateTerminal();
-            // Packets will get erased right after we reconnect.
-            packets = [];
-            unknownData = '';
-            button.innerText = 'Connect';
-            button.setAttribute('onclick', 'connect();');
-        }
-        socket.onmessage = function (event) {
-            if (!event.data instanceof ArrayBuffer) {
-                lastError = "non-binary data";
-                updateTerminal();
-                return;
-            }
-            const data = new Uint8Array(event.data);
-            if (data[0] == 0) {
-                unknownData = `Unknown data: ${formatPacket(data.slice(1))}\n`;
-                updateTerminal();
-                return;
-            }
-            if (data.length < 4) {
-                lastError = `data is too short, length = ${data.length}`;
-                updateTerminal();
-                return;
-            }
-            packets[data[3]] = formatPacket(data);
-            updateTerminal();
-        };
-
-        socket.onerror = function (error) {
-            lastError = "websocket error";
-            updateTerminal();
-        };
-    }
-    window.setTimeout(connect, 0);
-    //# sourceURL=monitor.js
-</script>
+</html>

@@ -7,6 +7,7 @@
 
 #include <cstring>
 
+#include "ArduinoJson.h"
 #include "bms_relay.h"
 #include "data.h"
 #include "settings.h"
@@ -17,6 +18,7 @@ namespace {
 DNSServer dnsServer;
 AsyncWebServer webServer(80);
 AsyncWebSocket ws("/rawdata");
+AsyncWebSocket telemetry("/socket");
 
 const String defaultPass("****");
 BmsRelay *relay;
@@ -39,22 +41,8 @@ inline String uptimeString() {
 }
 
 String templateProcessor(const String &var) {
-  if (var == "TOTAL_VOLTAGE") {
-    return String(relay->getTotalVoltageMillivolts() / 1000.0,
-                  /* decimalPlaces = */ 2);
-  } else if (var == "CURRENT_AMPS") {
-    return String(relay->getCurrentInAmps(),
-                  /* decimalPlaces = */ 1);
-  } else if (var == "BMS_SOC") {
-    return String(relay->getBmsReportedSOC());
-  } else if (var == "OVERRIDDEN_SOC") {
-    return String(relay->getOverriddenSOC());
-  } else if (var == "USED_CHARGE_MAH") {
-    return String(relay->getUsedChargeMah());
-  } else if (var == "REGENERATED_CHARGE_MAH") {
-    return String(relay->getRegeneratedChargeMah());
-  } else if (var == "OWIE_version") {
-    return "0.0.1";
+  if (var == "OWIE_version") {
+    return "0.0.2";
   } else if (var == "SSID") {
     return Settings->ap_name;
   } else if (var == "PASS") {
@@ -64,22 +52,6 @@ String templateProcessor(const String &var) {
     return "";
   } else if (var == "GRACEFUL_SHUTDOWN_COUNT") {
     return String(Settings->graceful_shutdown_count);
-  } else if (var == "UPTIME") {
-    return uptimeString();
-  } else if (var == "CELL_VOLTAGE_TABLE") {
-    const uint16_t *cellMillivolts = relay->getCellMillivolts();
-    String out;
-    out.reserve(256);
-    for (int i = 0; i < 3; i++) {
-      out.concat("<tr>");
-      for (int j = 0; j < 5; j++) {
-        out.concat("<td>");
-        out.concat(cellMillivolts[i * 5 + j] / 1000.0);
-        out.concat("</td>");
-      }
-      out.concat("<tr>");
-    }
-    return out;
   } else if (var == "BMS_SERIAL_OVERRIDE") {
     // so it doesn't return 0 when no override is set
     if (Settings->bms_serial == 0) {
@@ -93,7 +65,7 @@ String templateProcessor(const String &var) {
   return "<script>alert('UNKNOWN PLACEHOLDER')</script>";
 }
 
-} // namespace
+}  // namespace
 
 void setupWifi() {
   WiFi.setOutputPower(9);
@@ -111,17 +83,41 @@ void setupWifi() {
   }
   MDNS.begin("owie");
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-  dnsServer.start(53, "*", WiFi.softAPIP()); // DNS spoofing.
+  dnsServer.start(53, "*", WiFi.softAPIP());  // DNS spoofing.
   TaskQueue.postRecurringTask([]() {
     dnsServer.processNextRequest();
     MDNS.update();
   });
 }
 
+void streamTelemetry() {
+  StaticJsonDocument<512> doc;
+  doc["version"] = "0.0.2";
+  doc["voltage"] = String(relay->getTotalVoltageMillivolts() / 1000.0, 2);
+  doc["amperage"] = String(relay->getCurrentInAmps(), 1);
+  doc["soc"] = String(relay->getBmsReportedSOC());
+  doc["overriddenSoc"] = String(relay->getOverriddenSOC());
+  doc["usedCharge"] = String(relay->getUsedChargeMah());
+  doc["regenCharge"] = String(relay->getRegeneratedChargeMah());
+  doc["uptime"] = uptimeString();
+
+  JsonArray cells = doc.createNestedArray("cells");
+  const uint16_t *cellMillivolts = relay->getCellMillivolts();
+  for (int i = 0; i < 15; i++) {
+    cells.add(String(cellMillivolts[i] / 1000.0, 2));
+  }
+
+  char data[512];
+  serializeJson(doc, data);
+  telemetry.textAll(data);
+  TaskQueue.postOneShotTask([]() { streamTelemetry(); }, 1000);
+}
+
 void setupWebServer(BmsRelay *bmsRelay) {
   relay = bmsRelay;
   WebOta::begin(&webServer);
   webServer.addHandler(&ws);
+  webServer.addHandler(&telemetry);
   webServer.onNotFound([](AsyncWebServerRequest *request) {
     if (request->host().indexOf("owie.local") >= 0) {
       request->send(404);
@@ -132,6 +128,21 @@ void setupWebServer(BmsRelay *bmsRelay) {
   webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", INDEX_HTML_PROGMEM_ARRAY, INDEX_HTML_SIZE,
                     templateProcessor);
+  });
+  webServer.on("/styles.css", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send_P(200, "text/css", STYLES_CSS_PROGMEM_ARRAY, STYLES_CSS_SIZE);
+  });
+  webServer.on("/scripts.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send_P(200, "application/javascript", SCRIPTS_JS_PROGMEM_ARRAY,
+                    SCRIPTS_JS_SIZE);
+  });
+  webServer.on("/index.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send_P(200, "application/javascript", INDEX_JS_PROGMEM_ARRAY,
+                    INDEX_JS_SIZE);
+  });
+  webServer.on("/monitor.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send_P(200, "application/javascript", MONITOR_JS_PROGMEM_ARRAY,
+                    MONITOR_JS_SIZE);
   });
   webServer.on("/wifi", HTTP_ANY, [](AsyncWebServerRequest *request) {
     switch (request->method()) {
@@ -164,42 +175,45 @@ void setupWebServer(BmsRelay *bmsRelay) {
   });
   webServer.on("/settings", HTTP_ANY, [](AsyncWebServerRequest *request) {
     switch (request->method()) {
-    case HTTP_GET:
-      request->send_P(200, "text/html", SETTINGS_HTML_PROGMEM_ARRAY,
-                      SETTINGS_HTML_SIZE, templateProcessor);
-      return;
-    case HTTP_POST:
-      const auto bmsSerialParam = request->getParam("bs", true);
-      const auto apSelfPassword = request->getParam("pw", true);
-      if (bmsSerialParam == nullptr) {
-        request->send(400, "text/html", "Invalid BMS Serial number.");
+      case HTTP_GET:
+        request->send_P(200, "text/html", SETTINGS_HTML_PROGMEM_ARRAY,
+                        SETTINGS_HTML_SIZE, templateProcessor);
         return;
-      }
-      if (apSelfPassword == nullptr ||
-          apSelfPassword->value().length() >
-              sizeof(Settings->ap_self_password) ||
-          (apSelfPassword->value().length() < 8 &&
-           apSelfPassword->value().length() >
-               0)) { // this check is necessary so the user can't set a too
-                     // small password and thus the network wont' show up
-        request->send(400, "text/html", "Invalid AP password.");
+      case HTTP_POST:
+        const auto bmsSerialParam = request->getParam("bs", true);
+        const auto apSelfPassword = request->getParam("pw", true);
+        if (bmsSerialParam == nullptr) {
+          request->send(400, "text/html", "Invalid BMS Serial number.");
+          return;
+        }
+        if (apSelfPassword == nullptr ||
+            apSelfPassword->value().length() >
+                sizeof(Settings->ap_self_password) ||
+            (apSelfPassword->value().length() < 8 &&
+             apSelfPassword->value().length() >
+                 0)) {  // this check is necessary so the user can't set a too
+                        // small password and thus the network wont' show up
+          request->send(400, "text/html", "Invalid AP password.");
+          return;
+        }
+        // allows user to leave bms serial field blank instead of having to put
+        // 0
+        if (bmsSerialParam->value().length() == 0) {
+          Settings->bms_serial = 0;
+        } else {
+          Settings->bms_serial = bmsSerialParam->value().toInt();
+        }
+        std::strncpy(Settings->ap_self_password,
+                     apSelfPassword->value().c_str(),
+                     sizeof(Settings->ap_self_password));
+        saveSettingsAndRestartSoon();
+        request->send(200, "text/html", "Settings saved, restarting...");
         return;
-      }
-      // allows user to leave bms serial field blank instead of having to put 0
-      if (bmsSerialParam->value().length() == 0) {
-        Settings->bms_serial = 0;
-      } else {
-        Settings->bms_serial = bmsSerialParam->value().toInt();
-      }
-      std::strncpy(Settings->ap_self_password, apSelfPassword->value().c_str(),
-                   sizeof(Settings->ap_self_password));
-      saveSettingsAndRestartSoon();
-      request->send(200, "text/html", "Settings saved, restarting...");
-      return;
     }
     request->send(404);
   });
 
+  TaskQueue.postOneShotTask([]() { streamTelemetry(); }, 1000);
   webServer.begin();
 }
 

@@ -1,244 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- The HTML markup is based on the main page of Tasmota -->
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-    <title>Owie - Status</title>
-    <style>
-        div,
-        fieldset,
-        input,
-        select {
-            padding: 5px;
-            font-size: 1em;
-        }
-
-        fieldset {
-            background: #4f4f4f;
-        }
-
-        p {
-            margin: 0.5em 0;
-        }
-
-        input {
-            width: 100%%;
-            box-sizing: border-box;
-            -webkit-box-sizing: border-box;
-            -moz-box-sizing: border-box;
-            background: #dddddd;
-            color: #000000;
-        }
-
-        input[type=checkbox],
-        input[type=radio] {
-            width: 1em;
-            margin-right: 6px;
-            vertical-align: -1px;
-        }
-
-        input[type=range] {
-            width: 99%%;
-        }
-
-        select {
-            width: 100%%;
-            background: #dddddd;
-            color: #000000;
-        }
-
-        textarea {
-            resize: vertical;
-            width: 98%%;
-            height: 318px;
-            padding: 5px;
-            overflow: auto;
-            background: #1f1f1f;
-            color: #65c115;
-        }
-
-        body {
-            text-align: center;
-            font-family: verdana, sans-serif;
-            background: #252525;
-        }
-
-        td {
-            padding: 0px;
-        }
-
-        button {
-            border: 0;
-            border-radius: 0.3rem;
-            background: #1fa3ec;
-            color: #faffff;
-            line-height: 2.4rem;
-            font-size: 1.2rem;
-            width: 100%%;
-            -webkit-transition-duration: 0.4s;
-            transition-duration: 0.4s;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background: #0e70a4;
-        }
-
-        .bgrn {
-            background: #47c266;
-        }
-
-        .bgrn:hover {
-            background: #5aaf6f;
-        }
-
-        a {
-            color: #1fa3ec;
-            text-decoration: none;
-        }
-
-        .p {
-            float: left;
-            text-align: left;
-        }
-
-        .q {
-            float: right;
-            text-align: right;
-        }
-
-        .r {
-            border-radius: 0.3em;
-            padding: 2px;
-            margin: 6px 2px;
-        }
-
-        .hf {
-            display: none;
-        }
-
-        .cell-voltages td {
-            padding: 2px;
-            background: #354b4d;
-            border: 0px;
-            border-radius: 0.2rem;
-        }
-    </style>
-    <script>
-        function getXhr() {
-            const content = document.getElementById("content");
-            const xhr = new XMLHttpRequest();
-            xhr.addEventListener("load", function (event) {
-                content.innerHTML = event.target.responseText;
-                rescanContent();
-            });
-            xhr.addEventListener("error", function (event) {
-                content.innerHTML = 'Oops! Something went wrong.';
-            });
-            return xhr;
-        }
-        function handleFormSubmit(event) {
-            event.preventDefault();
-            const xhr = getXhr();
-            const form = event.target;
-            xhr.open(form.getAttribute('method') || 'GET', form.getAttribute('action'));
-            const formData = new FormData(form);
-            xhr.send(formData);
-        }
-
-        function handleLinkClick(event) {
-            event.preventDefault();
-            const xhr = getXhr();
-            xhr.open("GET", event.target.getAttribute('href'));
-            xhr.send();
-        }
-
-        function rescanContent() {
-            const content = document.getElementById('content');
-            Array.from(content.getElementsByTagName('form')).
-                filter(f => !f.hasAttribute('owie_procesed')).forEach((f) => {
-                    f.setAttribute('owie_procesed', '1');
-                    f.addEventListener("submit", handleFormSubmit);
-                });
-            Array.from(content.getElementsByTagName('a')).
-                filter((a) => !a.hasAttribute('owie_procesed')).forEach((a) => {
-                    a.setAttribute('owie_procesed', '1');
-                    a.addEventListener("click", handleLinkClick);
-                });
-            Array.from(content.getElementsByTagName('script')).
-                filter((s) => !s.hasAttribute('owie_procesed')).forEach((s) => {
-                    s.setAttribute('owie_procesed', '1');
-                    const clone = document.createElement('script');
-                    clone.text = s.innerHTML;
-                    s.parentElement.replaceChild(clone, s);
-                });
-        }
-        window.addEventListener('DOMContentLoaded', rescanContent);
-    </script>
+    <title>Status - Owie</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
 </head>
 
 <body>
-    <div style="text-align:left;display:inline-block;color:#eaeaea;min-width:340px;">
-        <div style="text-align:center;color:#eaeaea;">
-            <h2>Owie Status</h2>
+    <div class="wrapper">
+        <div class="header">
+            <div class="title">
+                <h2>Status</h2>
+            </div>
         </div>
         <div id="content">
             <table>
                 <tr>
-                    <th>Battery Voltage</th>
-                    <td>%TOTAL_VOLTAGE%v</td>
+                    <th>Battery Voltage:</th>
+                    <td id="voltage"></td>
                 </tr>
                 <tr>
-                    <th>Current</th>
-                    <td>%CURRENT_AMPS% Amps</td>
+                    <th>Current:</th>
+                    <td id="amperage"></td>
                 </tr>
                 <tr>
                     <th>BMS reported SOC:</th>
-                    <td>%BMS_SOC%%%</td>
+                    <td id="soc"></td>
                 </tr>
                 <tr>
                     <th>Overridden SOC:</th>
-                    <td>%OVERRIDDEN_SOC%%%</td>
+                    <td id="overriddenSoc"></td>
                 </tr>
                 <tr>
                     <th>Used charge:</th>
-                    <td>%USED_CHARGE_MAH% mAh</td>
+                    <td id="usedCharge"></td>
                 </tr>
                 <tr>
                     <th>Regen:</th>
-                    <td>%REGENERATED_CHARGE_MAH% mAh</td>
+                    <td id="regenCharge"></td>
                 </tr>
                 <tr>
                     <th>Uptime:</th>
-                    <td>%UPTIME%</td>
+                    <td id="uptime"></td>
                 </tr>
                 <tr>
-                    <th>Cell voltages</th>
+                    <th>Cell voltages:</th>
                     <td>
-                        <table class="cell-voltages">%CELL_VOLTAGE_TABLE%</table>
+                        <table id="cells"></table>
                     </td>
                 </tr>
             </table>
             <hr>
-            <form action="/wifi">
-                <button>Wifi Configuration</button>
-            </form>
-            <p></p>
-            <form action="/monitor">
-                <button>Monitor BMS data</button>
-            </form>
-            <p></p>
-            <form action="/settings">
-                <button>Settings</button>
-            </form>
+            <button data-route="/wifi">Wifi Configuration</button>
+            <button data-route="/monitor">Monitor BMS data</button>
+            <button data-route="/settings">Settings</button>
         </div>
-        <div style="text-align:right;font-size:11px;">
+        <div class="footer">
             <hr>
-            <p style="color:#aaa;">Owie %OWIE_version%</p>
+            <p>Owie v%OWIE_version%</p>
         </div>
     </div>
+    <script src="scripts.js"></script>
+    <script src="index.js"></script>
 </body>
 
 </html>

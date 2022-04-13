@@ -1,7 +1,36 @@
-<form method="post" action="/wifi">
-        <p>WiFi Network <b>to connect to</b><br><input placeholder="Type or Select your WiFi Network"
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+    <title>Status - Owie</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="header">
+            <button data-route="/">Back</button>
+            <div class="title">
+                <h2>Wifi</h2>
+            </div>
+        </div>
+        <div id="content">
+            <form method="post" action="/wifi">
+                <p>WiFi Network <b>to connect to</b><br><input placeholder="Type or Select your WiFi Network"
                         value="%SSID%" name="s"></p>
-        <p><label><b>WiFi Password</b></label><br><input  type="password" placeholder="Enter your WiFi Password"
+                <p><label><b>WiFi Password</b></label><br><input type="password" placeholder="Enter your WiFi Password"
                         value="%PASS%" name="p"></p>
-        <button>Save</button>
-</form>
+                <button>Save</button>
+            </form>
+        </div>
+        <div class="footer">
+            <hr>
+            <p>Owie v%OWIE_version%</p>
+        </div>
+    </div>
+    <script src="scripts.js"></script>
+</body>
+
+</html>
